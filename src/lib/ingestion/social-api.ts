@@ -172,3 +172,59 @@ export async function fetchTwitterProfilesFromSocialApi(
 export function hasSocialApiKey(): boolean {
   return !!process.env.SOCIALAPI_API_KEY?.trim();
 }
+
+/* ------------------------------------------------------------------ */
+/*  Twitter Search (keyword/query search, NOT user profile lookup)    */
+/* ------------------------------------------------------------------ */
+
+export interface TwitterSearchResult {
+  text: string;
+  user: { name: string; username: string };
+  created_at?: string;
+}
+
+export async function searchTwitter(
+  query: string
+): Promise<TwitterSearchResult[]> {
+  const key = process.env.SOCIALAPI_API_KEY?.trim();
+  if (!key) return [];
+
+  try {
+    const url = `${BASE_URL.replace(/\/$/, "")}/twitter/search?query=${encodeURIComponent(query)}`;
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${key}`,
+    };
+
+    const res = await fetchWithTimeout(url, { method: "GET", headers }, FETCH_TIMEOUT_MS);
+    if (!res.ok) {
+      console.warn("[social-api] Twitter search failed:", res.status);
+      return [];
+    }
+
+    const data = await res.json();
+    const tweets: unknown[] =
+      (data as Record<string, unknown>).tweets as unknown[] ??
+      (data as Record<string, unknown>).data as unknown[] ??
+      (data as Record<string, unknown>).results as unknown[] ??
+      (Array.isArray(data) ? data : []);
+
+    return tweets
+      .filter((t): t is Record<string, unknown> => t != null && typeof t === "object")
+      .map((t) => ({
+        text: (typeof t.text === "string" ? t.text : (t.full_text as string) ?? "") as string,
+        user: {
+          name: ((t.user as Record<string, unknown>)?.name as string) ?? "",
+          username:
+            ((t.user as Record<string, unknown>)?.screen_name as string) ??
+            ((t.user as Record<string, unknown>)?.username as string) ??
+            "",
+        },
+        created_at: typeof t.created_at === "string" ? t.created_at : undefined,
+      }));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn("[social-api] Twitter search error:", message);
+    return [];
+  }
+}

@@ -1,398 +1,368 @@
-import { useCRM } from '@/contexts/CRMContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Search, TrendingUp, Bookmark, Calendar, UserPlus, AtSign } from 'lucide-react';
-import { useState } from 'react';
+import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Search, Loader2, Sparkles, Globe, AtSign, ExternalLink, FileText } from 'lucide-react';
+import { useState, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+
+interface TwitterResult {
+  text: string;
+  user: { name: string; username: string };
+  created_at?: string;
+}
+
+interface WebResult {
+  title: string;
+  link: string;
+  snippet: string;
+}
+
+interface Source {
+  title: string;
+  url: string;
+  type: 'web' | 'twitter';
+}
+
+interface DeepResearchResponse {
+  summary: string;
+  keyFindings: string[];
+  twitterInsights: { summary: string; tweets: TwitterResult[] };
+  webResults: { summary: string; results: WebResult[] };
+  followUpQueries: string[];
+  sources: Source[];
+  rounds: number;
+}
+
+const EXAMPLE_QUERIES = [
+  'EigenLayer restaking ecosystem',
+  'Polygon web3 sponsorship events',
+  'Arbitrum ecosystem grants 2025',
+];
 
 export default function ResearchSection() {
-  const { selectedTeam, refetchLeads, setActiveView } = useCRM();
-  const queryClient = useQueryClient();
-  const [researchQuery, setResearchQuery] = useState('');
-  const [lumaCompany, setLumaCompany] = useState('');
-  const [lumaLoading, setLumaLoading] = useState(false);
-  const [lumaDisplayEvents, setLumaDisplayEvents] = useState<{ id: string; title: string; url: string; event_date: string | null }[]>([]);
+  const [query, setQuery] = useState('');
+  const [isResearching, setIsResearching] = useState(false);
+  const [progress, setProgress] = useState({ message: '', percent: 0 });
+  const [results, setResults] = useState<DeepResearchResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
-  const [newName, setNewName] = useState('');
-  const [newWebsite, setNewWebsite] = useState('');
-  const [newTwitter, setNewTwitter] = useState('');
-  const [researchLoading, setResearchLoading] = useState(false);
+  const clearTimers = () => {
+    timersRef.current.forEach(clearTimeout);
+    timersRef.current = [];
+  };
 
-  const [twitterHandlesInput, setTwitterHandlesInput] = useState('');
-  const [twitterFetchLoading, setTwitterFetchLoading] = useState(false);
+  const handleResearch = async () => {
+    const trimmed = query.trim();
+    if (!trimmed || isResearching) return;
 
-  const searchTrimmed = researchQuery.trim();
-  const { data: entities = [], isLoading: entitiesLoading } = useQuery({
-    queryKey: ['entities-research', searchTrimmed],
-    queryFn: async () => {
-      const params = new URLSearchParams();
-      if (searchTrimmed) params.set('search', searchTrimmed);
-      const res = await fetch(`/api/entities?${params}`);
-      if (!res.ok) return [];
-      return res.json();
-    },
-  });
+    setIsResearching(true);
+    setResults(null);
+    setError(null);
+    setProgress({ message: 'Searching web & Twitter...', percent: 15 });
 
-  const { data: savedLumaEvents = [], refetch: refetchSavedLuma } = useQuery({
-    queryKey: ['luma-saved', searchTrimmed],
-    queryFn: async () => {
-      if (!searchTrimmed) return [];
-      const res = await fetch(`/api/luma/events/saved?company=${encodeURIComponent(searchTrimmed)}`);
-      if (!res.ok) return [];
-      return res.json();
-    },
-    enabled: !!searchTrimmed,
-  });
+    clearTimers();
+    timersRef.current.push(
+      setTimeout(() => setProgress({ message: 'AI analyzing initial results...', percent: 40 }), 3000),
+      setTimeout(() => setProgress({ message: 'Running follow-up queries...', percent: 65 }), 8000),
+      setTimeout(() => setProgress({ message: 'Synthesizing final analysis...', percent: 85 }), 14000),
+    );
+
+    try {
+      const res = await fetch('/api/research/deep', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: trimmed }),
+      });
+
+      clearTimers();
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data?.error ?? 'Research failed');
+        toast.error(data?.details ?? data?.error ?? 'Research failed');
+        return;
+      }
+
+      setProgress({ message: 'Complete!', percent: 100 });
+      setResults(data);
+      toast.success(`Research complete — ${data.rounds} round(s), ${data.sources?.length ?? 0} sources`);
+    } catch (e) {
+      clearTimers();
+      const msg = e instanceof Error ? e.message : 'Something went wrong';
+      setError(msg);
+      toast.error(msg);
+    } finally {
+      setIsResearching(false);
+      setTimeout(() => setProgress({ message: '', percent: 0 }), 1500);
+    }
+  };
 
   return (
     <div className="flex-1 flex flex-col min-w-0 overflow-auto">
       {/* Header */}
       <div className="border-b border-border px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-sm font-semibold font-mono">RESEARCH HUB</h2>
-            <p className="text-[10px] text-muted-foreground mt-0.5">Add new leads below · Search companies · Market signals & trend analysis</p>
-          </div>
-          <div className="space-y-1">
-            <div className="relative w-80">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-              <Input
-                placeholder="Search companies (e.g. Eigen Layer, Polygon)..."
-                value={researchQuery}
-                onChange={(e) => setResearchQuery(e.target.value)}
-                className="pl-8 h-8 text-xs bg-muted border-border"
-              />
-            </div>
-            <p className="text-[10px] text-muted-foreground">Filters the list below. Add new companies with the form below.</p>
-          </div>
-        </div>
+        <h2 className="text-sm font-semibold font-mono">RESEARCH HUB</h2>
+        <p className="text-[10px] text-muted-foreground mt-0.5">
+          Enter any query — AI searches the web & Twitter, analyzes results, then runs follow-up queries for deeper insights.
+        </p>
       </div>
 
       <div className="flex-1 p-6 space-y-6 overflow-auto">
-        {/* Add new lead — first and prominent */}
-        <Card className="bg-card border-border border-primary/30 shadow-sm" id="add-new-lead">
-          <CardHeader className="p-4 pb-2">
-            <div className="flex items-center gap-2">
-              <UserPlus className="w-4 h-4 text-primary" />
-              <CardTitle className="text-xs font-semibold font-mono">Add new lead</CardTitle>
-              <span className="text-[10px] font-mono text-primary bg-primary/10 px-1.5 py-0.5 rounded">Saves to DB</span>
+        {/* Search Input */}
+        <Card className="bg-card border-border border-primary/30 shadow-sm">
+          <CardContent className="p-5">
+            <div className="flex gap-3">
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder="Enter your research query..."
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleResearch()}
+                  className="pl-10 h-12 text-sm bg-muted border-border"
+                  disabled={isResearching}
+                />
+              </div>
+              <Button
+                onClick={handleResearch}
+                disabled={isResearching || !query.trim()}
+                className="h-12 px-6"
+              >
+                {isResearching ? (
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                ) : (
+                  <Search className="w-4 h-4 mr-2" />
+                )}
+                Research
+              </Button>
             </div>
-            <p className="text-[10px] text-muted-foreground mt-0.5">Research a company and add to pipeline. Data is stored in Supabase (entities + pipeline).</p>
-          </CardHeader>
-          <CardContent className="p-4 pt-0 space-y-3">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div className="grid gap-1.5">
-                <label className="text-[10px] font-mono text-muted-foreground">Company name *</label>
-                <Input placeholder="e.g. EigenLayer" value={newName} onChange={(e) => setNewName(e.target.value)} className="h-8 text-xs" />
-              </div>
-              <div className="grid gap-1.5">
-                <label className="text-[10px] font-mono text-muted-foreground">Website (optional)</label>
-                <Input placeholder="https://eigenlayer.xyz" value={newWebsite} onChange={(e) => setNewWebsite(e.target.value)} className="h-8 text-xs" />
-              </div>
-              <div className="grid gap-1.5">
-                <label className="text-[10px] font-mono text-muted-foreground">Twitter (optional)</label>
-                <Input placeholder="@eigenlayer" value={newTwitter} onChange={(e) => setNewTwitter(e.target.value)} className="h-8 text-xs" />
-              </div>
+            <div className="flex flex-wrap gap-2 mt-3">
+              {EXAMPLE_QUERIES.map((q) => (
+                <button
+                  key={q}
+                  onClick={() => setQuery(q)}
+                  className="text-[10px] font-mono px-2 py-1 rounded bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {q}
+                </button>
+              ))}
             </div>
-            <Button
-              size="sm"
-              className="h-8"
-              disabled={researchLoading || !newName.trim()}
-              onClick={async () => {
-                setResearchLoading(true);
-                try {
-                  const res = await fetch('/api/research', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      name: newName.trim(),
-                      website: newWebsite.trim() || undefined,
-                      twitterHandle: newTwitter.trim() || undefined,
-                    }),
-                  });
-                  const data = await res.json();
-                  if (!res.ok) {
-                    toast.error(data?.error || 'Failed');
-                    if (data?.details) toast.error(data.details);
-                    return;
-                  }
-                  if (data?.existing) {
-                    toast.success('Company already in DB — showing existing.');
-                  } else if (data?.addedWithoutResearch) {
-                    toast.success(data?.message ?? 'Company saved to DB. Add ANTHROPIC_API_KEY for AI insights.');
-                  } else {
-                    toast.success('Company added to DB and pipeline.');
-                  }
-                  setNewName('');
-                  setNewWebsite('');
-                  setNewTwitter('');
-                  refetchLeads();
-                  queryClient.invalidateQueries({ queryKey: ['entities-research'] });
-                  queryClient.invalidateQueries({ queryKey: ['entities-leadgen'] });
-                  setActiveView('pipeline');
-                } catch (e) {
-                  toast.error('Something went wrong');
-                } finally {
-                  setResearchLoading(false);
-                }
-              }}
-            >
-              {researchLoading ? 'Researching & saving…' : 'Research & add to pipeline'}
-            </Button>
           </CardContent>
         </Card>
 
-        {/* Add by Twitter handles (Social API) — one or multiple */}
-        <Card className="bg-card border-border border-primary/20">
-          <CardHeader className="p-4 pb-2">
-            <div className="flex items-center gap-2">
-              <AtSign className="w-4 h-4 text-primary" />
-              <CardTitle className="text-xs font-semibold font-mono">Add by Twitter handles (Social API)</CardTitle>
-              <span className="text-[10px] font-mono text-primary bg-primary/10 px-1.5 py-0.5 rounded">SOCIALAPI_API_KEY</span>
-            </div>
-            <p className="text-[10px] text-muted-foreground mt-0.5">Enter one or more Twitter handles (comma or space separated). Fetches from Social API and saves each as an entity + pipeline lead.</p>
-          </CardHeader>
-          <CardContent className="p-4 pt-0 space-y-3">
-            <div className="grid gap-2">
-              <label className="text-[10px] font-mono text-muted-foreground">Twitter handle(s)</label>
-              <Input
-                placeholder="@eigenlayer, @0xPolygon, polygon"
-                value={twitterHandlesInput}
-                onChange={(e) => setTwitterHandlesInput(e.target.value)}
-                className="h-8 text-xs font-mono"
-              />
-            </div>
-            <Button
-              size="sm"
-              className="h-8"
-              disabled={twitterFetchLoading || !twitterHandlesInput.trim()}
-              onClick={async () => {
-                setTwitterFetchLoading(true);
-                try {
-                  const handles = twitterHandlesInput
-                    .split(/[\s,]+/)
-                    .map((h) => h.trim())
-                    .filter(Boolean);
-                  const res = await fetch('/api/twitter/fetch-and-save', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ handles }),
-                  });
-                  const data = await res.json();
-                  if (!res.ok) {
-                    toast.error(data?.error || 'Failed');
-                    if (data?.details) toast.error(data.details);
-                    return;
-                  }
-                  const n = data?.created?.length ?? 0;
-                  if (n > 0) {
-                    toast.success(data?.message ?? `Saved ${n} account(s) to DB.`);
-                    setTwitterHandlesInput('');
-                    refetchLeads();
-                    queryClient.invalidateQueries({ queryKey: ['entities-research'] });
-                    queryClient.invalidateQueries({ queryKey: ['entities-leadgen'] });
-                    setActiveView('pipeline');
-                  }
-                  if (data?.failed?.length > 0) {
-                    data.failed.forEach((f: { handle: string; reason: string }) => toast.error(`${f.handle}: ${f.reason}`));
-                  }
-                  if (data?.skipped?.length > 0 && n === 0) {
-                    toast.info(data.skipped.map((s: { handle: string }) => s.handle).join(', ') + ' already in DB.');
-                  }
-                } catch (e) {
-                  toast.error('Something went wrong');
-                } finally {
-                  setTwitterFetchLoading(false);
-                }
-              }}
-            >
-              {twitterFetchLoading ? 'Fetching & saving…' : 'Fetch from Social API & save'}
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Luma events: company name → show already scraped events from DB */}
-        <Card className="bg-card border-border border-primary/20">
-          <CardHeader className="p-4 pb-2">
-            <div className="flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-primary" />
-              <CardTitle className="text-xs font-semibold font-mono">Luma events</CardTitle>
-            </div>
-            <p className="text-[10px] text-muted-foreground mt-0.5">Enter company name to see Luma events (already scraped, last 12 months, saved in DB).</p>
-          </CardHeader>
-          <CardContent className="p-4 pt-0 space-y-3">
-            <div className="grid gap-2">
-              <label className="text-[10px] font-mono text-muted-foreground">Company name</label>
-              <Input
-                placeholder="e.g. Polygon"
-                value={lumaCompany}
-                onChange={(e) => setLumaCompany(e.target.value)}
-                className="h-8 text-xs"
-              />
-            </div>
-            <Button
-              size="sm"
-              className="h-8"
-              disabled={lumaLoading || !lumaCompany.trim()}
-              onClick={async () => {
-                const company = lumaCompany.trim();
-                if (!company) {
-                  toast.error('Enter company name');
-                  return;
-                }
-                setLumaLoading(true);
-                setLumaDisplayEvents([]);
-                try {
-                  const res = await fetch(`/api/luma/events/for-company?company=${encodeURIComponent(company)}`);
-                  if (!res.ok) throw new Error('Failed to fetch');
-                  const data = await res.json();
-                  setLumaDisplayEvents(Array.isArray(data) ? data : []);
-                  if (!Array.isArray(data) || data.length === 0) {
-                    toast.info(`No events for "${company}". Add Luma URLs in backend (src/lib/luma-urls.ts) for this company.`);
-                  } else {
-                    toast.success(`${data.length} events`);
-                  }
-                } catch {
-                  toast.error('Could not load events');
-                } finally {
-                  setLumaLoading(false);
-                }
-              }}
-            >
-              {lumaLoading ? 'Loading…' : 'Show events'}
-            </Button>
-            {lumaDisplayEvents.length > 0 && (
-              <div className="rounded border border-border overflow-hidden">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b border-border bg-muted/50">
-                      <th className="p-2 text-left font-mono">Event</th>
-                      <th className="p-2 text-left font-mono">Date</th>
-                      <th className="p-2 text-left font-mono">Link</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {lumaDisplayEvents.map((evt) => (
-                      <tr key={evt.id} className="border-b border-border">
-                        <td className="p-2 font-medium">{evt.title}</td>
-                        <td className="p-2 text-muted-foreground">{evt.event_date ?? '—'}</td>
-                        <td className="p-2">
-                          <a href={evt.url} target="_blank" rel="noreferrer" className="text-primary underline">Open</a>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+        {/* Progress */}
+        {isResearching && (
+          <Card className="bg-card border-border">
+            <CardContent className="p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-mono text-primary">{progress.message}</span>
+                <span className="text-[10px] font-mono text-muted-foreground">{progress.percent}%</span>
               </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Saved Luma events – shown when searching by company name */}
-        {searchTrimmed && (
-          <div>
-            <div className="flex items-center gap-2 mb-3">
-              <Calendar className="w-4 h-4 text-accent" />
-              <h3 className="text-xs font-semibold font-mono uppercase">
-                Saved events for &quot;{searchTrimmed}&quot;
-              </h3>
-            </div>
-            {savedLumaEvents.length === 0 ? (
-              <Card className="bg-card border-border">
-                <CardContent className="p-4">
-                  <p className="text-[11px] text-muted-foreground italic">No Luma events for this company. Add Luma URLs for the company in backend (src/lib/luma-urls.ts) to fetch events.</p>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="rounded border border-border overflow-hidden">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b border-border bg-muted/50">
-                      <th className="p-2 text-left font-mono">Event</th>
-                      <th className="p-2 text-left font-mono">Date</th>
-                      <th className="p-2 text-left font-mono">Link</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {savedLumaEvents.map((evt: { id: string; title: string; url: string; event_date: string | null }) => (
-                      <tr key={evt.id} className="border-b border-border">
-                        <td className="p-2 font-medium">{evt.title}</td>
-                        <td className="p-2 text-muted-foreground">{evt.event_date ?? '—'}</td>
-                        <td className="p-2">
-                          <a href={evt.url} target="_blank" rel="noreferrer" className="text-primary underline">Open</a>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+              <Progress value={progress.percent} className="h-1.5" />
+            </CardContent>
+          </Card>
         )}
 
-        {/* Recent research (from database) – filtered by search */}
-        <div>
-          <div className="flex items-center gap-2 mb-3">
-            <Bookmark className="w-4 h-4 text-accent" />
-            <h3 className="text-xs font-semibold font-mono uppercase">
-              Recent research (entities)
-              {searchTrimmed && (
-                <span className="font-normal text-muted-foreground ml-2">
-                  — filtering by &quot;{searchTrimmed}&quot;
-                </span>
-              )}
-            </h3>
-          </div>
-          <div className="space-y-3">
-            {entitiesLoading ? (
-              <Card className="bg-card border-border">
-                <CardContent className="p-4">
-                  <p className="text-[11px] text-muted-foreground">Searching…</p>
-                </CardContent>
-              </Card>
-            ) : entities.length === 0 ? (
-              <Card className="bg-card border-border">
-                <CardContent className="p-4">
-                  <p className="text-[11px] text-muted-foreground italic">
-                    {searchTrimmed
-                      ? `No companies match "${searchTrimmed}". Add it above using "Research & add to pipeline".`
-                      : "No companies yet. Add one above using the form."}
-                  </p>
-                </CardContent>
-              </Card>
-            ) : (
-              entities.slice(0, 10).map((ent: { id: string; name: string; overview: string | null; category: string[]; fit_score: number | null; created_at: string }) => (
-                <Card key={ent.id} className="bg-card border-border">
-                  <CardContent className="p-4">
-                    <div className="flex items-start justify-between mb-2">
-                      <div>
-                        <h4 className="text-sm font-semibold">{ent.name}</h4>
-                        <span className="text-[10px] font-mono text-muted-foreground">{ent.created_at?.slice(0, 10)}</span>
-                      </div>
-                      {ent.fit_score != null && (
-                        <span className={cn(
-                          'px-2 py-0.5 rounded text-[10px] font-mono',
-                          ent.fit_score >= 70 ? 'bg-success/10 text-success' : ent.fit_score >= 40 ? 'bg-accent/10 text-accent' : 'bg-muted text-muted-foreground'
-                        )}>
-                          Fit {ent.fit_score}
+        {/* Error */}
+        {error && (
+          <Card className="bg-destructive/5 border-destructive/30">
+            <CardContent className="p-4">
+              <p className="text-xs text-destructive">{error}</p>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Results */}
+        {results && (
+          <>
+            {/* AI Summary */}
+            <Card className="bg-card border-border border-primary/20">
+              <CardHeader className="p-4 pb-2">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-primary" />
+                  <CardTitle className="text-xs font-semibold font-mono">AI ANALYSIS</CardTitle>
+                  <Badge variant="secondary" className="text-[9px]">
+                    {results.rounds} round{results.rounds > 1 ? 's' : ''}
+                  </Badge>
+                  <Badge variant="secondary" className="text-[9px]">
+                    {results.sources.length} sources
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="p-4 pt-0">
+                <p className="text-[11px] text-secondary-foreground leading-relaxed whitespace-pre-line">
+                  {results.summary}
+                </p>
+              </CardContent>
+            </Card>
+
+            {/* Tabbed Results */}
+            <Tabs defaultValue="findings" className="w-full">
+              <TabsList className="h-8">
+                <TabsTrigger value="findings" className="text-xs">
+                  Key Findings ({results.keyFindings.length})
+                </TabsTrigger>
+                <TabsTrigger value="twitter" className="text-xs">
+                  Twitter ({results.twitterInsights.tweets.length})
+                </TabsTrigger>
+                <TabsTrigger value="web" className="text-xs">
+                  Web ({results.webResults.results.length})
+                </TabsTrigger>
+                <TabsTrigger value="sources" className="text-xs">
+                  Sources ({results.sources.length})
+                </TabsTrigger>
+              </TabsList>
+
+              {/* Key Findings */}
+              <TabsContent value="findings" className="mt-3 space-y-2">
+                {results.keyFindings.map((finding, i) => (
+                  <Card key={i} className="bg-card border-border">
+                    <CardContent className="p-3 flex items-start gap-2">
+                      <FileText className="w-3.5 h-3.5 text-primary mt-0.5 shrink-0" />
+                      <p className="text-[11px] text-secondary-foreground leading-relaxed">{finding}</p>
+                    </CardContent>
+                  </Card>
+                ))}
+              </TabsContent>
+
+              {/* Twitter Insights */}
+              <TabsContent value="twitter" className="mt-3 space-y-3">
+                {results.twitterInsights.summary && (
+                  <Card className="bg-card border-border border-accent/20">
+                    <CardContent className="p-3">
+                      <p className="text-[11px] text-secondary-foreground leading-relaxed">
+                        {results.twitterInsights.summary}
+                      </p>
+                    </CardContent>
+                  </Card>
+                )}
+                {results.twitterInsights.tweets.map((tweet, i) => (
+                  <Card key={i} className="bg-card border-border">
+                    <CardContent className="p-3">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <AtSign className="w-3 h-3 text-muted-foreground" />
+                        <span className="text-[10px] font-mono font-semibold">
+                          {tweet.user.name || tweet.user.username}
                         </span>
-                      )}
-                    </div>
-                    <p className="text-[11px] text-secondary-foreground leading-relaxed line-clamp-2">{ent.overview || '—'}</p>
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      {(ent.category ?? []).map((c: string) => (
-                        <span key={c} className="px-1.5 py-0.5 rounded bg-muted text-[9px] font-mono text-muted-foreground">{c}</span>
-                      ))}
-                    </div>
+                        {tweet.user.username && (
+                          <span className="text-[10px] font-mono text-muted-foreground">
+                            @{tweet.user.username}
+                          </span>
+                        )}
+                        {tweet.created_at && (
+                          <span className="text-[9px] text-muted-foreground ml-auto">
+                            {tweet.created_at}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-secondary-foreground leading-relaxed">{tweet.text}</p>
+                    </CardContent>
+                  </Card>
+                ))}
+                {results.twitterInsights.tweets.length === 0 && (
+                  <p className="text-[11px] text-muted-foreground italic px-1">No tweets found for this query.</p>
+                )}
+              </TabsContent>
+
+              {/* Web Results */}
+              <TabsContent value="web" className="mt-3 space-y-3">
+                {results.webResults.summary && (
+                  <Card className="bg-card border-border border-accent/20">
+                    <CardContent className="p-3">
+                      <p className="text-[11px] text-secondary-foreground leading-relaxed">
+                        {results.webResults.summary}
+                      </p>
+                    </CardContent>
+                  </Card>
+                )}
+                {results.webResults.results.map((result, i) => (
+                  <Card key={i} className="bg-card border-border">
+                    <CardContent className="p-3">
+                      <div className="flex items-start gap-2">
+                        <Globe className="w-3.5 h-3.5 text-muted-foreground mt-0.5 shrink-0" />
+                        <div className="min-w-0">
+                          <a
+                            href={result.link}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-xs font-medium text-primary hover:underline flex items-center gap-1"
+                          >
+                            {result.title}
+                            <ExternalLink className="w-3 h-3 shrink-0" />
+                          </a>
+                          <p className="text-[10px] text-muted-foreground font-mono truncate mt-0.5">{result.link}</p>
+                          <p className="text-[11px] text-secondary-foreground leading-relaxed mt-1">{result.snippet}</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </TabsContent>
+
+              {/* Sources */}
+              <TabsContent value="sources" className="mt-3">
+                <Card className="bg-card border-border">
+                  <CardContent className="p-3 space-y-1.5">
+                    {results.sources.map((source, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <Badge
+                          variant="secondary"
+                          className={cn(
+                            'text-[9px] w-14 justify-center shrink-0',
+                            source.type === 'twitter' ? 'bg-accent/10 text-accent' : 'bg-primary/10 text-primary'
+                          )}
+                        >
+                          {source.type}
+                        </Badge>
+                        <a
+                          href={source.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[11px] text-primary hover:underline truncate"
+                        >
+                          {source.title}
+                        </a>
+                      </div>
+                    ))}
                   </CardContent>
                 </Card>
-              ))
+              </TabsContent>
+            </Tabs>
+
+            {/* Follow-up Queries */}
+            {results.followUpQueries.length > 0 && (
+              <Card className="bg-card border-border">
+                <CardContent className="p-4">
+                  <p className="text-[10px] font-mono text-muted-foreground mb-2 uppercase">
+                    Suggested follow-up queries
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {results.followUpQueries.map((fq) => (
+                      <Button
+                        key={fq}
+                        variant="outline"
+                        size="sm"
+                        className="text-xs h-7"
+                        onClick={() => {
+                          setQuery(fq);
+                          setResults(null);
+                        }}
+                      >
+                        <Search className="w-3 h-3 mr-1.5" />
+                        {fq}
+                      </Button>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
             )}
-          </div>
-        </div>
+          </>
+        )}
       </div>
     </div>
   );

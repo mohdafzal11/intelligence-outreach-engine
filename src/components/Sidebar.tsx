@@ -15,7 +15,6 @@ const teamIcons: Record<TeamType, typeof Users> = {
 };
 
 const viewItems: { key: ViewType; label: string; icon: typeof Users }[] = [
-  { key: 'pipeline', label: 'Pipeline', icon: LayoutDashboard },
   { key: 'research', label: 'Research', icon: BookOpen },
   { key: 'leadgen', label: 'Lead Gen', icon: UserPlus },
   { key: 'outreach', label: 'Outreach', icon: Send },
@@ -102,36 +101,6 @@ export default function Sidebar() {
           );
         })}
       </nav>
-
-      <div className="p-3 border-t border-border space-y-1.5">
-        <div className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-muted text-muted-foreground text-[10px] font-mono">
-          <Search className="w-3 h-3" />
-          <span>⌘K to search</span>
-        </div>
-        <a
-          href="/api/status"
-          target="_blank"
-          rel="noreferrer"
-          className="flex items-center gap-2 px-2 py-1.5 rounded-md text-[10px] font-mono text-muted-foreground hover:text-foreground transition-colors"
-          title="See env, DB, and API status"
-        >
-          <Database className="w-3 h-3" />
-          Status / APIs
-        </a>
-        <a
-          href="/api/db-test"
-          target="_blank"
-          rel="noreferrer"
-          className={cn(
-            'flex items-center gap-2 px-2 py-1.5 rounded-md text-[10px] font-mono transition-colors',
-            dbLoading ? 'bg-muted text-muted-foreground' : dbTest?.ok ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'
-          )}
-          title={dbTest?.ok ? dbTest?.message : dbTest?.error ? `${dbTest.error}: ${dbTest?.details ?? ''}` : 'Check database connection'}
-        >
-          <Database className="w-3 h-3" />
-          {dbLoading ? 'Checking…' : dbTest?.ok ? 'DB connected' : 'DB not connected'}
-        </a>
-      </div>
     </aside>
   );
 }
