@@ -117,13 +117,14 @@ export async function fetchTwitterProfileFromSocialApi(
       let detail = body;
       try {
         const j = JSON.parse(body);
-        detail =
+        detail = String(
           (j as Record<string, unknown>).message ??
           (j as Record<string, unknown>).error ??
           (Array.isArray((j as Record<string, unknown>).errors)
-            ? (j as Record<string, unknown>).errors?.[0]
+            ? ((j as Record<string, unknown>).errors as unknown[])?.[0]
             : null) ??
-          body;
+          body
+        );
       } catch {
         // use body as-is
       }
@@ -153,9 +154,9 @@ export async function fetchTwitterProfilesFromSocialApi(
     return result;
   }
 
-  const uniqueHandles = [
-    ...new Set(handles.map((h) => h.replace(/^@/, "").trim()).filter(Boolean)),
-  ];
+  const uniqueHandles = Array.from(
+    new Set(handles.map((h) => h.replace(/^@/, "").trim()).filter(Boolean))
+  );
   const settled = await Promise.allSettled(
     uniqueHandles.map(async (h) => fetchTwitterProfileFromSocialApi(h))
   );

@@ -55,7 +55,7 @@ export async function POST(request: Request) {
     const skipped: { handle: string; reason: string }[] = [];
     const failed: { handle: string; reason: string }[] = [];
 
-    for (const handle of results.keys()) {
+    for (const handle of Array.from(results.keys())) {
       const twitter = results.get(handle) ?? null;
       const cleanHandle = handle.replace(/^@/, "");
 
