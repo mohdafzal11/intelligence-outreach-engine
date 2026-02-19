@@ -1,0 +1,71 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
+
+@layer base {
+  :root {
+    --background: 220 20% 6%;
+    --foreground: 210 20% 92%;
+    --card: 220 18% 9%;
+    --card-foreground: 210 20% 92%;
+    --popover: 220 18% 9%;
+    --popover-foreground: 210 20% 92%;
+    --primary: 174 72% 52%;
+    --primary-foreground: 220 20% 6%;
+    --secondary: 220 16% 14%;
+    --secondary-foreground: 210 20% 82%;
+    --muted: 220 14% 12%;
+    --muted-foreground: 215 12% 50%;
+    --accent: 37 92% 58%;
+    --accent-foreground: 220 20% 6%;
+    --destructive: 0 72% 55%;
+    --destructive-foreground: 210 40% 98%;
+    --success: 152 60% 48%;
+    --success-foreground: 220 20% 6%;
+    --border: 220 14% 16%;
+    --input: 220 14% 16%;
+    --ring: 174 72% 52%;
+    --radius: 0.5rem;
+    --sidebar-background: 220 18% 7%;
+    --sidebar-foreground: 210 20% 82%;
+    --sidebar-primary: 174 72% 52%;
+    --sidebar-primary-foreground: 220 20% 6%;
+    --sidebar-accent: 220 16% 14%;
+    --sidebar-accent-foreground: 210 20% 92%;
+    --sidebar-border: 220 14% 16%;
+    --sidebar-ring: 174 72% 52%;
+    --font-mono: 'JetBrains Mono', monospace;
+    --font-sans: 'Inter', system-ui, sans-serif;
+    --glow-primary: 0 0 20px hsl(174 72% 52% / 0.15);
+    --glow-accent: 0 0 20px hsl(37 92% 58% / 0.15);
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-sans);
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  .font-mono {
+    font-family: var(--font-mono);
+  }
+  .glow-primary {
+    box-shadow: var(--glow-primary);
+  }
+  .glow-accent {
+    box-shadow: var(--glow-accent);
+  }
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-accent;
+  }
+}
